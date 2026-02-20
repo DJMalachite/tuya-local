@@ -1,0 +1,82 @@
+name: RGB+CCT LED Panel Light
+products:
+  - id: rc3ahhngdmciuhn9
+    model: SHA5356
+
+entities:
+  - entity: light
+    name: Panel
+    dps:
+      - id: 20
+        type: boolean
+        name: switch
+
+      - id: 21
+        type: string
+        name: color_mode
+        mapping:
+          - dps_val: white
+            value: color_temp
+          - dps_val: colour
+            value: hs
+          # Treat these as "effects" via color_mode (Tuya Local supports that)
+          - dps_val: scene
+            value: Scene
+          - dps_val: music
+            value: Music
+
+      - id: 22
+        type: integer
+        name: brightness
+        range:
+          min: 10
+          max: 1000
+
+      - id: 23
+        type: integer
+        name: color_temp
+        range:
+          min: 0
+          max: 1000
+        mapping:
+          - target_range:
+              min: 2700
+              max: 6500
+
+      - id: 24
+        type: hex
+        name: rgbhsv
+        format:
+          - name: h
+            bytes: 2
+            range:
+              min: 0
+              max: 360
+          - name: s
+            bytes: 2
+            range:
+              min: 0
+              max: 1000
+          - name: v
+            bytes: 2
+            range:
+              min: 0
+              max: 1000
+
+  # Optional: expose DP36 so you can paste custom scene payloads (base64)
+  - entity: text
+    name: Mix light scene (DP36)
+    category: config
+    dps:
+      - id: 36
+        type: base64
+        name: value
+
+  # Optional: expose DP51 too (base64) for advanced combined RGB/CW experiments
+  - entity: text
+    name: Mix RGBCW (DP51)
+    category: config
+    dps:
+      - id: 51
+        type: base64
+        name: value
