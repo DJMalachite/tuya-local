@@ -3,6 +3,7 @@ Setup for different kinds of Tuya light devices
 """
 
 import logging
+import base64
 from struct import pack, unpack
 
 import homeassistant.util.color as color_util
@@ -56,7 +57,10 @@ class TuyaLocalLight(TuyaLocalEntity, LightEntity):
         self._rgbhsv_dps = dps_map.pop("rgbhsv", None)
         self._named_color_dps = dps_map.pop("named_color", None)
         self._effect_dps = dps_map.pop("effect", None)
+        self._mix_rgbcw_dps = dps_map.pop("mix_rgbcw", None) # Custom DPS for some lights that have separate RGB and white channels but only a single control for both
+
         self._init_end(dps_map)
+
 
         # Set min and max color temp
         if self._color_temp_dps:
@@ -255,6 +259,86 @@ class TuyaLocalLight(TuyaLocalEntity, LightEntity):
                 return mode
             return EFFECT_OFF
 
+
+    # --- mix_rgbcw support (composite RGB+CCT control, e.g. DP51 mix_rgbcw) ---
+
+    def _decode_mix(self):
+        """Return (mode, h, s, v_col, v_wht, ct) or None."""
+        if not self._mix_rgbcw_dps:
+            return None
+
+        raw = self._mix_rgbcw_dps.get_value(self._device)
+        if not raw:
+            return None
+
+        # raw expected to be base64 text
+        try:
+            data = base64.b64decode(raw)
+        except Exception:
+            _LOGGER.debug("mix_rgbcw: failed base64 decode: %r", raw)
+            return None
+
+        if len(data) < 12:
+            return None
+
+        try:
+            return unpack(">6H", data[:12])
+        except Exception:
+            return None
+
+    def _encode_mix(self, mode, h, s, v_col, v_wht, ct):
+        payload = pack(">6H", int(mode), int(h), int(s), int(v_col), int(v_wht), int(ct))
+        return base64.b64encode(payload).decode()
+
+    def _ct_kelvin_to_0_1000(self, kelvin: int) -> int:
+        """Map Kelvin -> 0..1000 using entity min/max CT if available."""
+        mn = getattr(self, "_attr_min_color_temp_kelvin", 2700) or 2700
+        mx = getattr(self, "_attr_max_color_temp_kelvin", 6500) or 6500
+        kelvin = max(mn, min(mx, int(kelvin)))
+        if mx == mn:
+            return 0
+        return int(round((kelvin - mn) * 1000 / (mx - mn)))
+
+    def _ct_0_1000_to_kelvin(self, ct: int) -> int:
+        """Map 0..1000 -> Kelvin using entity min/max CT if available."""
+        mn = getattr(self, "_attr_min_color_temp_kelvin", 2700) or 2700
+        mx = getattr(self, "_attr_max_color_temp_kelvin", 6500) or 6500
+        ct = max(0, min(1000, int(ct)))
+        if mx == mn:
+            return mn
+        return int(round(mn + ct * (mx - mn) / 1000))
+
+    @property
+    def hs_color(self):
+        # Prefer mix_rgbcw if available
+        mix = self._decode_mix()
+        if mix:
+            _, h, s, _, _, _ = mix
+            # Tuya: s=0..1000, HA expects 0..100
+            return (int(h), int(round(s / 10)))
+        return super().hs_color
+
+    @property
+    def color_temp_kelvin(self):
+        # Prefer mix_rgbcw if available
+        mix = self._decode_mix()
+        if mix:
+            _, _, _, _, _, ct = mix
+            return self._ct_0_1000_to_kelvin(ct)
+        return super().color_temp_kelvin
+
+    @property
+    def brightness(self):
+        # Prefer mix_rgbcw if available
+        mix = self._decode_mix()
+        if mix:
+            mode, _, _, v_col, v_wht, _ = mix
+            v = v_col if mode in (6, 7) else v_wht
+            return int(round(v * 255 / 1000))
+        return super().brightness
+
+
+
     def named_color_from_hsv(self, hs, brightness):
         """Get the named color from the rgb value"""
         if self._named_color_dps:
@@ -278,6 +362,60 @@ class TuyaLocalLight(TuyaLocalEntity, LightEntity):
         settings = {}
         color_mode = None
         _LOGGER.debug("Light turn_on: %s", params)
+
+    # --- mix_rgbcw fast-path ---
+    # If this device exposes a composite DP (mix_rgbcw), prefer it for any
+    # brightness/hs/ct changes. This avoids the "only switch works" issue
+    # on unified Tuya RGB+CCT panels.
+    if self._mix_rgbcw_dps and (
+        ATTR_HS_COLOR in params
+        or ATTR_COLOR_TEMP_KELVIN in params
+        or ATTR_BRIGHTNESS in params
+        or ATTR_WHITE in params
+    ):
+        current = self._decode_mix() or (7, 0, 0, 1000, 1000, 1000)
+        mode, h, s, v_col, v_wht, ct = current
+
+        if ATTR_HS_COLOR in params:
+            h = int(round(params[ATTR_HS_COLOR][0]))
+            s = int(round(params[ATTR_HS_COLOR][1] * 10))  # 0-100 -> 0-1000
+            mode = 6  # colour
+
+        if ATTR_COLOR_TEMP_KELVIN in params:
+            ct = self._ct_kelvin_to_0_1000(int(params[ATTR_COLOR_TEMP_KELVIN]))
+            mode = 5  # white
+
+        # Some calls use ATTR_WHITE as a brightness-like signal for white mode
+        if ATTR_WHITE in params and ATTR_BRIGHTNESS not in params:
+            v = int(round(int(params[ATTR_WHITE]) * 1000 / 255))
+            v_wht = v
+            mode = 5
+
+        if ATTR_BRIGHTNESS in params:
+            v = int(round(int(params[ATTR_BRIGHTNESS]) * 1000 / 255))
+            if mode in (6, 7):
+                v_col = v
+            else:
+                v_wht = v
+
+        if ATTR_HS_COLOR in params and ATTR_COLOR_TEMP_KELVIN in params:
+            mode = 7
+
+        encoded = self._encode_mix(mode, h, s, v_col, v_wht, ct)
+        settings = {
+            **settings,
+            **self._mix_rgbcw_dps.get_values_to_set(self._device, encoded, settings),
+        }
+
+        # Ensure switched on
+        if self._switch_dps and not self.is_on and self._switch_dps.id not in settings:
+            settings = settings | self._switch_dps.get_values_to_set(
+                self._device, True, settings
+            )
+
+        if settings:
+            await self._device.async_set_properties(settings)
+
         if self._color_mode_dps and ATTR_WHITE in params:
             if self.color_mode != ColorMode.WHITE:
                 color_mode = ColorMode.WHITE
@@ -530,3 +668,4 @@ class TuyaLocalLight(TuyaLocalEntity, LightEntity):
         disp_on = self.is_on
 
         await (self.async_turn_on() if not disp_on else self.async_turn_off())
+
