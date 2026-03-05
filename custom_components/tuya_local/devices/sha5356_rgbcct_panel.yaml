@@ -72,6 +72,19 @@ entities:
         type: base64
         name: value
 
+  - entity: select
+    translation_key: scene
+    category: config
+    dps:
+      - id: 51
+        type: string
+        name: Mix light scene (DP36) Presets
+        optional: true
+        mapping:
+          - dps_val: "AMoAAAECA11dAQAAA+gD6F1dAQAAA+gACg=="
+            value: "Red Alert"
+          - dps_val: "AMsAAAEBAyUlAAB3A+gD6A=="
+            value: "Green Alert"
   # Optional: expose DP51 too (base64) for advanced combined RGB/CW experiments
   - entity: text
     name: Mix RGBCW (DP51)
@@ -90,6 +103,9 @@ entities:
         name: option
         optional: true
         mapping:
+          - dps_val: "AAUA7APoA+gBLwEV"
+            value: "Default - WW 30%"
+            default: true
           - dps_val: "AAUA7APoA+gD6AAA"
             value: "WW 100%"
           - dps_val: "AAUA7APoA+gB9AAA"
