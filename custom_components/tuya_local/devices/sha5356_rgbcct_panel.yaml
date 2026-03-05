@@ -73,12 +73,12 @@ entities:
         name: value
 
   - entity: select
-    translation_key: scene
+    translation_key: scene2
     category: config
     dps:
-      - id: 51
+      - id: 36
         type: string
-        name: Mix light scene (DP36) Presets
+        name: option
         optional: true
         mapping:
           - dps_val: "AMoAAAECA11dAQAAA+gD6F1dAQAAA+gACg=="
