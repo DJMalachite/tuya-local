@@ -1,4 +1,4 @@
-name: RGB+CCT LED Panel Light
+name: RGB+CCT LED Panel Light(SHA5356)
 products:
   - id: rc3ahhngdmciuhn9
     model: SHA5356
@@ -11,73 +11,76 @@ entities:
         type: boolean
         name: switch
 
-#       - id: 21
-#         type: string
-#         name: color_mode
-#         mapping:
-#           - dps_val: white
-#             value: color_temp
-#           - dps_val: colour
-#             value: hs
-#           # Treat these as "effects" via color_mode (Tuya Local supports that)
-#           - dps_val: scene
-#             value: Scene
-#           - dps_val: music
-#             value: Music
-#
-#       - id: 22
-#         type: integer
-#         name: brightness
-#         range:
-#           min: 10
-#           max: 1000
-#
-#       - id: 23
-#         type: integer
-#         name: color_temp
-#         range:
-#           min: 0
-#           max: 1000
-#         mapping:
-#           - target_range:
-#               min: 2700
-#               max: 6500
-#
-#       - id: 24
-#         type: hex
-#         name: rgbhsv
-#         format:
-#           - name: h
-#             bytes: 2
-#             range:
-#               min: 0
-#               max: 360
-#           - name: s
-#             bytes: 2
-#             range:
-#               min: 0
-#               max: 1000
-#           - name: v
-#             bytes: 2
-#             range:
-#               min: 0
-#               max: 1000
+      - id: 21
+        type: string
+        name: color_mode
+        optional: true
+        mapping:
+          - dps_val: white
+            value: color_temp
+          - dps_val: colour
+            value: hs
+          - dps_val: scene
+            value: scene
+          - dps_val: music
+            value: music
 
-  # Optional: expose DP36 so you can paste custom scene payloads (base64)
+      - id: 22
+        type: integer
+        name: brightness
+        optional: true
+        range:
+          min: 10
+          max: 1000
+
+      - id: 23
+        type: integer
+        name: color_temp
+        optional: true
+        range:
+          min: 0
+          max: 1000
+        mapping:
+          - target_range:
+              min: 2700
+              max: 6500
+
+      - id: 24
+        type: hex
+        name: rgbhsv
+        optional: true
+        format:
+          - name: h
+            bytes: 2
+            range:
+              min: 0
+              max: 360
+          - name: s
+            bytes: 2
+            range:
+              min: 0
+              max: 1000
+          - name: v
+            bytes: 2
+            range:
+              min: 0
+              max: 1000
+
   - entity: text
-    name: Mix light scene (DP36)
+    name: Mix light scene payload
     category: config
     dps:
       - id: 36
         type: base64
         name: value
+        optional: true
 
   - entity: select
-    translation_key: scene2
+    name: Mix light scene preset
     category: config
     dps:
       - id: 36
-        type: string
+        type: base64
         name: option
         optional: true
         mapping:
@@ -85,21 +88,22 @@ entities:
             value: "Red Alert"
           - dps_val: "AMsAAAEBAyUlAAB3A+gD6A=="
             value: "Green Alert"
-  # Optional: expose DP51 too (base64) for advanced combined RGB/CW experiments
+
   - entity: text
-    name: Mix RGBCW (DP51)
+    name: Mix RGBCW payload
     category: config
     dps:
       - id: 51
         type: base64
         name: value
+        optional: true
 
   - entity: select
-    translation_key: scene
+    name: Mix RGBCW preset
     category: config
     dps:
       - id: 51
-        type: string
+        type: base64
         name: option
         optional: true
         mapping:
@@ -118,7 +122,7 @@ entities:
             value: "WN 50%"
           - dps_val: "AAUA7APoA+gACgHg"
             value: "WN 1%"
-          - dps_val: "AAUA7APoA+gD6AAA"
+          - dps_val: "AAYAAAPoA+gD6AAA"
             value: "RGB RED 100%"
           - dps_val: "AAYAAAPoA+gB9AAA"
             value: "RGB RED 50%"
